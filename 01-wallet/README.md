@@ -84,10 +84,10 @@ fsp-wallet address secret [OPTIONS]
 
 ## Balance
 ```
-fsp-wallet balance [PATH]
+fsp-wallet balance <PUBKEY>
 ```
-- Retrieves the current balance, an optional keypair path maybe provided using `-k` or `--keypair`
-and then providing the path to your keypair file.
+- Retrieves the current balance of the provided pubkey, if no pubkey is provided, defaults to the config
+pubkey, if there is no config pubkey, fallback is the client pubkey.
 
 ## Airdrop
 ```

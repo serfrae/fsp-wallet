@@ -7,7 +7,7 @@ use {
     solana_sdk::{
         bs58,
         commitment_config::CommitmentConfig,
-        native_token::{sol_to_lamports, lamports_to_sol},
+        native_token::{lamports_to_sol, sol_to_lamports},
         pubkey::Pubkey,
         signature::{read_keypair_file, Signer},
         signer::keypair::{write_keypair_file, Keypair},
@@ -46,8 +46,7 @@ enum Commands {
 
     /// Get the SOL balance of the specified keypair, if `None` reverts to default
     Balance {
-        #[arg(long, short)]
-        keypair: Option<PathBuf>,
+        pubkey: Option<Pubkey>,
     },
 
     /// Airdrop the requested amount of SOL (this will fail on mainnet).
@@ -172,14 +171,18 @@ fn main() -> Result<()> {
                 )
             }
         },
-        Commands::Balance { keypair } => {
-            let pubkey = if let Ok(kp) = get_keypair_file(keypair.as_ref()) {
-                kp
+        Commands::Balance { pubkey } => {
+            let pubkey = if pubkey.is_none() {
+                if let Ok(kp) = get_keypair_file(None) {
+                    kp
+                } else {
+                    read_keypair_file(solana_config_file.keypair_path)
+                        .map_err(|e| anyhow!("Failed to get keypair file: {}", e))?
+                }
+                .pubkey()
             } else {
-                read_keypair_file(solana_config_file.keypair_path)
-                    .map_err(|e| anyhow!("Failed to get keypair file: {}", e))?
-            }
-            .pubkey();
+                pubkey.unwrap()
+            };
 
             let balance = rpc_client.get_balance(&pubkey)?;
             println!("Balance: {} SOL", lamports_to_sol(balance));
