@@ -104,6 +104,7 @@ enum AddressOptions {
         keypair: Option<PathBuf>,
         /// provide argument "base58" for base58 encoded private key, or no argument for
         /// default byte array
+        #[arg(long, short)]
         as_type: Option<String>,
     },
 }
@@ -162,7 +163,7 @@ fn main() -> Result<()> {
                 .to_bytes();
 
                 println!(
-                    "Private key: {}",
+                    "Secret key: {}",
                     if let Some(_) = as_type {
                         bs58::encode(secret).into_string()
                     } else {
