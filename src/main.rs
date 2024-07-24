@@ -5,6 +5,7 @@ use {
     solana_cli_config,
     solana_client::rpc_client::RpcClient,
     solana_sdk::{
+        bs58,
         commitment_config::CommitmentConfig,
         native_token::sol_to_lamports,
         pubkey::Pubkey,
@@ -38,6 +39,11 @@ enum Commands {
     /// Generate a new keypair
     #[command(subcommand)]
     Keypair(KeypairOptions),
+
+    /// Retrieve the public or private key of the specified keypair
+    #[command(subcommand)]
+    Address(AddressOptions),
+
     /// Airdrop the requested amount of SOL (this will fail on mainnet).
     Airdrop {
         /// Specify a wallet to airdrop solana tokens to, defaults to the keypair generated
@@ -73,6 +79,22 @@ enum KeypairOptions {
     Remove,
 }
 
+#[derive(Subcommand, Debug)]
+enum AddressOptions {
+    Public {
+        /// The path of the keypair file, if `None` returns the default
+        keypair: Option<PathBuf>,
+    },
+
+    Secret {
+        /// The path of the keypair file, if `None` returns the default
+        keypair: Option<PathBuf>,
+        /// provide argument "base58" for base58 encoded private key, or no argument for
+        /// default byte array
+        as_type: Option<String>,
+    },
+}
+
 fn main() -> Result<()> {
     let args = Cli::parse();
 
@@ -104,13 +126,45 @@ fn main() -> Result<()> {
             }
             KeypairOptions::Remove => delete_folder()?,
         },
+        Commands::Address(address_options) => match address_options {
+            AddressOptions::Public { keypair } => {
+                let pubkey = if let Ok(kp) = get_keypair_file(keypair.as_ref()) {
+                    kp.pubkey()
+                } else {
+                    read_keypair_file(solana_config_file.keypair_path)
+                        .map_err(|e| anyhow!("Failed to get keypair file: {}", e))?
+                        .pubkey()
+                };
+
+                println!("Pubkey: {}", pubkey);
+            }
+            AddressOptions::Secret { keypair, as_type } => {
+                let secret = if let Ok(kp) = get_keypair_file(keypair.as_ref()) {
+                    kp
+                } else {
+                    read_keypair_file(solana_config_file.keypair_path)
+                        .map_err(|e| anyhow!("Failed to get keypair file: {}", e))?
+                }
+                .secret()
+                .to_bytes();
+
+                println!(
+                    "Private key: {}",
+                    if let Some(_) = as_type {
+                        bs58::encode(secret).into_string()
+                    } else {
+                        format!("{:?}", secret)
+                    }
+                )
+            }
+        },
         Commands::Airdrop { to, amount } => {
             let to = if let Some(to) = to {
                 to
             } else {
                 {
-                    if let Ok(keypair) = get_keypair_file(None) {
-                        keypair
+                    if let Ok(kp) = get_keypair_file(None) {
+                        kp
                     } else {
                         read_keypair_file(solana_config_file.keypair_path)
                             .map_err(|e| anyhow!("Failed to get a keypair: {}", e))?
@@ -123,21 +177,21 @@ fn main() -> Result<()> {
                 .get_latest_blockhash()
                 .map_err(|e| anyhow!("Unable to get latest blockhash: {}", e))?;
 
-            let transaction = rpc_client.request_airdrop_with_blockhash(
+            let tx = rpc_client.request_airdrop_with_blockhash(
                 &to,
                 sol_to_lamports(amount),
                 &latest_blockhash,
             )?;
 
             rpc_client.confirm_transaction_with_spinner(
-                &transaction,
+                &tx,
                 &latest_blockhash,
                 CommitmentConfig::confirmed(),
             )?;
         }
         Commands::Transfer { from, to, amount } => {
-            let from = if let Ok(keypair) = get_keypair_file(from.as_ref()) {
-                keypair
+            let from = if let Ok(kp) = get_keypair_file(from.as_ref()) {
+                kp
             } else {
                 read_keypair_file(solana_config_file.keypair_path)
                     .map_err(|e| anyhow!("Failed to get a keypair: {}", e))?
@@ -145,16 +199,16 @@ fn main() -> Result<()> {
 
             let ix = transfer(&from.pubkey(), &to, sol_to_lamports(amount));
 
-            let mut transaction = Transaction::new_with_payer(&[ix], Some(&from.pubkey()));
+            let mut tx = Transaction::new_with_payer(&[ix], Some(&from.pubkey()));
 
             let latest_blockhash = rpc_client
                 .get_latest_blockhash()
                 .map_err(|err| anyhow!("Unable to get latest blockhash: {}", err))?;
 
-            transaction.sign(&[&from], latest_blockhash);
+            tx.sign(&[&from], latest_blockhash);
 
             let txid = rpc_client
-                .send_and_confirm_transaction_with_spinner(&transaction)
+                .send_and_confirm_transaction_with_spinner(&tx)
                 .map_err(|err| anyhow!("Unable to send transaction: {}", err))?;
             println!("TXID: {}", txid);
         }
@@ -223,13 +277,5 @@ fn create_keypair_file(path: Option<&PathBuf>) -> Result<Keypair> {
         let _ = write_keypair_file(&keypair, get_folder()?)
             .map_err(|e| anyhow!("Could not write keypair: {}", e));
         Ok(keypair)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_get_folder() {
     }
 }
