@@ -1,0 +1,18 @@
+[package]
+name = "fsp-wallet"
+authors = ["Ser Frae <a@serfrae.com>"]
+description = "CLI wallet for the Solana fellowship"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+clap = {version = "4.5.10", features = ["derive", "cargo"] }
+directories = "5.0.1"
+solana-cli-config = "2.0.3"
+solana-client = "2.0.3"
+solana-sdk = "2.0.3"
+
+[[bin]]
+name = "fsp-wallet"
+path = "src/main.rs"
